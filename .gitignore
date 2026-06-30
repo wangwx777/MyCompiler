@@ -1,0 +1,30 @@
+# === Demo files (excluded per user request) ===
+examples/demo.cpp
+examples/demo.s
+examples/demo.o
+demo_O0.S
+*demo_O0*
+
+# === Build artifacts ===
+*.o
+*.obj
+*.exe
+*.out
+*.dll
+*.lib
+*.a
+*.so
+
+# === IDE / editor ===
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === Build directories ===
+build/
+__pycache__/
+*.pyc

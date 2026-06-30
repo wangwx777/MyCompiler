@@ -1,0 +1,147 @@
+#!/bin/bash
+# ============================================================
+#  MyCPU C Compiler Wrapper — mycc
+#  Usage: mycc [options] <input.c|input.s|input.o>
+# ============================================================
+#
+#  Standalone toolchain — no LLVM source needed.
+#  Copy the entire dist/ directory to any machine.
+#  Usage on another PC:
+#    export PATH="/path/to/dist/bin:$PATH"
+#    mycc test.c -o test.o
+# ============================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLANG="$SCRIPT_DIR/clang"
+LLVM_MC="$SCRIPT_DIR/llvm-mc"
+LLVM_OBJDUMP="$SCRIPT_DIR/llvm-objdump"
+LLC="$SCRIPT_DIR/llc"
+
+# On Windows (Git Bash), append .exe
+[[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]] && {
+    CLANG="${CLANG}.exe"
+    LLVM_MC="${LLVM_MC}.exe"
+    LLVM_OBJDUMP="${LLVM_OBJDUMP}.exe"
+    LLC="${LLC}.exe"
+}
+
+TARGET="mycpu-unknown-elf"
+BASE_FLAGS="-ffreestanding -include stdint.h -include stddef.h -include stdbool.h"
+OPT_LEVEL="-O2"
+MODE="c"
+OUTPUT=""
+INPUT=""
+ACTION="compile"
+EXTRA_ARGS=()
+
+# ── Help ───────────────────────────────────────────────────
+show_help() {
+    cat <<'EOF'
+
+  MyCPU C Compiler Toolchain — mycc
+  ==========================================
+
+  Usage: mycc [options] <input.c>
+
+  Compile options:
+    -O0, -O1, -O2, -Os, -Oz   Optimization level (default: -O2)
+    -c                         Compile to .o object (default)
+    -S                         Compile to .s assembly
+    -o <file>                  Output filename
+    -v                         Verbose output
+
+  Other tools:
+    --asm  <input.s>            Assemble .s → .o (llvm-mc)
+    --dis  <input.o>            Disassemble .o to see machine code
+    --llc  <input.ll>           Compile LLVM IR → .o
+
+  Version:
+    --version                  Show clang version
+
+  Examples:
+    mycc test.c                # → test.o (O2)
+    mycc -O0 -S test.c         # → test.s (assembly)
+    mycc --asm test.s -o test.o # .s → .o
+    mycc --dis test.o          # View disassembly
+
+  System headers:
+    -ffreestanding, auto-include: stdint.h stddef.h stdbool.h
+    No need to #include them in source files.
+
+  Package structure:
+    dist/bin/    clang, llvm-mc, llvm-objdump, llc, mycc
+    dist/lib/    clang built-in headers
+    dist/include/ MyCPU-specific headers
+EOF
+}
+
+# ── Parse arguments ───────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -O0|-O1|-O2|-Os|-Oz) OPT_LEVEL="$1"; shift ;;
+        -S)  MODE="S"; shift ;;
+        -c)  MODE="c"; shift ;;
+        -v)  EXTRA_ARGS+=("-v"); shift ;;
+        -o)  OUTPUT="$2"; shift 2 ;;
+        --asm)     ACTION="assemble"; shift ;;
+        --dis)     ACTION="disassemble"; shift ;;
+        --llc)     ACTION="llc"; shift ;;
+        --help|-h) show_help; exit 0 ;;
+        --version) "$CLANG" --version; exit 0 ;;
+        *)
+            if [[ -z "$INPUT" ]]; then
+                INPUT="$1"
+            else
+                EXTRA_ARGS+=("$1")
+            fi
+            shift
+            ;;
+    esac
+done
+
+# ── Validate input ─────────────────────────────────────────
+if [[ -z "$INPUT" ]]; then
+    echo "[mycc] ERROR: No input file. Use mycc --help for usage."
+    exit 1
+fi
+if [[ ! -f "$INPUT" ]]; then
+    echo "[mycc] ERROR: Input file '$INPUT' not found."
+    exit 1
+fi
+
+# ── Auto-deduce output name ────────────────────────────────
+if [[ -z "$OUTPUT" ]]; then
+    BASENAME="${INPUT%.*}"
+    if [[ "$MODE" == "S" ]]; then
+        OUTPUT="${BASENAME}.s"
+    else
+        OUTPUT="${BASENAME}.o"
+    fi
+fi
+
+# ── Execute action ─────────────────────────────────────────
+
+case "$ACTION" in
+    assemble)
+        echo "[mycc] Assembling $INPUT -> $OUTPUT (target: $TARGET)"
+        "$LLVM_MC" -triple="$TARGET" -filetype=obj -o "$OUTPUT" "$INPUT"
+        ;;
+    disassemble)
+        echo "[mycc] Disassembling $INPUT"
+        "$LLVM_OBJDUMP" -d --triple=mycpu "$INPUT"
+        ;;
+    llc)
+        echo "[mycc] Compiling LLVM IR $INPUT -> $OUTPUT ($OPT_LEVEL)"
+        "$LLC" -mtriple="$TARGET" $OPT_LEVEL -filetype=obj -o "$OUTPUT" "$INPUT"
+        ;;
+    compile)
+        echo "[mycc] Compiling $INPUT -> $OUTPUT (target: $TARGET, $OPT_LEVEL)"
+        if [[ "$MODE" == "S" ]]; then
+            "$CLANG" -target "$TARGET" $BASE_FLAGS $OPT_LEVEL -S -o "$OUTPUT" "$INPUT" "${EXTRA_ARGS[@]}"
+        else
+            "$CLANG" -target "$TARGET" $BASE_FLAGS $OPT_LEVEL -c -o "$OUTPUT" "$INPUT" "${EXTRA_ARGS[@]}"
+        fi
+        echo "[mycc] OK — $OUTPUT"
+        ;;
+esac
