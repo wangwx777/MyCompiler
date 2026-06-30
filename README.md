@@ -74,19 +74,5 @@ clang -target mycpu-unknown-elf -S -o output.s input.c
 echo 'movab.w r1, r2' | llvm-mc -triple=mycpu-unknown-elf -show-encoding
 ```
 
-## 指令集
-
-| Opcode | 助记符 | 功能 |
-|--------|--------|------|
-| 0x12 | `movab.w/h/b` | 寄存器传送 |
-| 0x13 | `movi.w/h/b` | 立即数加载 |
-| 0x14 | `ld.w/h/b` | 协处理器读 |
-| 0x15 | `st.w/h/b` | 协处理器写 |
-| 0x28 | `mov.w/h/b` | 内存访存 (c_bit: 0=Load, 1=Store) |
-| 0x00-0x0A | `add/sub/and/or/xor/not` | 算术逻辑 |
-| 0x0C-0x11 | `shl/shr/sar` | 移位 |
-| 0x16-0x17 | `cmp/cmpi` | 比较 |
-| 0x18-0x1F | `jmp/jalr/bz/bnz/call/ret` | 控制流 |
-| 0x22-0x27 | `bset/bclr/bnot/btst/nop/halt` | 位操作/系统 |
 
 32 位定长指令，三种粒度 (Word/Half/Byte)，opcode 共享、size 区分。
